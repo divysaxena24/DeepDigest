@@ -1,10 +1,26 @@
+# Deep Learning Core & ABI Alignment (Python 3.12 Compatible)
+numpy==1.26.4
+protobuf==4.25.3
+ml-dtypes==0.3.2
+h5py==3.14.0
 tensorflow-cpu==2.16.1
+tensorflow-intel==2.16.1
+tf-keras==2.16.0
+
+# PyTorch & Hugging Face Transformers
+torch>=2.2.0
 transformers==4.40.2
 sentence-transformers==2.7.0
-fastapi==0.111.0
-uvicorn==0.29.0
-python-multipart==0.0.9
+accelerate>=0.29.0
+
+# Document Ingestion & Text Processing
 pypdf==4.2.0
+
+# API Backend & Server Runtime
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+
+# Testing & Client Verification
 pytest==8.2.0
 httpx==0.27.0
-numpy==1.26.4
