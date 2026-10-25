@@ -37,15 +37,31 @@ class TFDeepLearningDocPipeline:
 
         self.current_chunks = self.vector_store.chunks
 
-    def ingest_pdf(self, file_bytes: bytes) -> dict:
-        pdf_reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+    def extract_and_clean_pdf(self, file_source) -> str:
+        """Extract text from bytes or file-like object."""
+        if isinstance(file_source, (bytes, bytearray)):
+            stream = io.BytesIO(file_source)
+        elif hasattr(file_source, "read"):
+            stream = file_source
+        else:
+            raise ValueError("Unsupported file format for PDF extraction.")
+
+        pdf_reader = pypdf.PdfReader(stream)
         full_text = ""
         for page in pdf_reader.pages:
             t = page.extract_text()
             if t:
                 full_text += t + " "
 
-        return self.ingest_text(full_text)
+        clean = re.sub(r'\s+', ' ', full_text).strip()
+        # Automatically ingest into chunks and vector store
+        if clean:
+            self.ingest_text(clean)
+        return clean
+
+    def ingest_pdf(self, file_bytes: bytes) -> dict:
+        text = self.extract_and_clean_pdf(file_bytes)
+        return {"chunks_count": len(self.current_chunks), "total_words": len(text.split())}
 
     def ingest_text(self, text: str) -> dict:
         clean = re.sub(r'\s+', ' ', text).strip()
@@ -103,7 +119,6 @@ class TFDeepLearningDocPipeline:
         top_chunk_idx = int(np.argmax(norm_weights))
         top_chunk_text = self.current_chunks[top_chunk_idx]
 
-        # Dynamic max_length prevents warnings on short test chunks
         token_count = max(len(top_chunk_text.split()), 10)
         max_len = min(130, max(25, int(token_count * 1.2)))
         min_len = min(10, max_len - 5)
