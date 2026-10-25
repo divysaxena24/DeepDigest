@@ -13,6 +13,9 @@ transformers==4.40.2
 sentence-transformers==2.7.0
 accelerate>=0.29.0
 
+# Vector Index & Semantic Search
+faiss-cpu==1.8.0
+
 # Document Ingestion & Text Processing
 pypdf==4.2.0
 
