@@ -69,6 +69,14 @@ async def upload_document(file: UploadFile = File(...)):
         "message": f"Successfully parsed {file.filename} ({word_count} words)."
     }
 
+@app.post("/ingest_text")
+def ingest_text(text: str = Form(...), filename: str = Form("direct_text.txt")):
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty.")
+    DOC_STORE["text"] = text.strip()
+    DOC_STORE["filename"] = filename
+    return {"filename": filename, "word_count": len(text.split()), "status": "stored"}
+
 @app.post("/summarize")
 def summarize_document():
     if not DOC_STORE["text"]:
