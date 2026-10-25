@@ -4,53 +4,119 @@
   <meta charset="UTF-8">
   <title>DeepDigest | Document Intelligence</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js for Attention Heatmap & Distribution -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <div class="max-w-5xl mx-auto py-10 px-6">
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased selection:bg-indigo-500 selection:text-white">
+  <div class="max-w-6xl mx-auto py-10 px-6">
+    <!-- Header -->
     <header class="mb-10 text-center">
-      <h1 class="text-4xl font-extrabold tracking-tight text-indigo-400">DeepDigest</h1>
-      <p class="text-slate-400 mt-2 text-sm">Deep Learning Document Salience & Transformer QA Pipeline</p>
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-950/70 border border-indigo-800 text-indigo-400 text-xs font-semibold uppercase tracking-wider mb-3">
+        Bi-GRU Bahdanau Attention &middot; Transformers
+      </div>
+      <h1 class="text-4xl md:text-5xl font-black tracking-tight bg-gradient-to-r from-indigo-400 via-sky-300 to-emerald-400 bg-clip-text text-transparent">
+        DeepDigest Engine
+      </h1>
+      <p class="text-slate-400 mt-2 text-sm max-w-xl mx-auto">
+        Neural salience document summarization with extractive contextual question answering.
+      </p>
     </header>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-      <!-- Left Column: Upload & Ingestion -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg flex flex-col gap-6">
-        <div>
-          <h2 class="text-lg font-semibold text-slate-200 mb-2">1. Ingest Document</h2>
-          <p class="text-xs text-slate-400 mb-4">Upload a PDF document to trigger text normalization and Bi-GRU chunking.</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+      <!-- Left Column: Ingestion & Salience -->
+      <div class="flex flex-col gap-6">
+        <!-- Ingestion Box -->
+        <section class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-base font-bold text-slate-200">1. Ingest Document</h2>
+            <span id="docBadge" class="hidden text-[11px] font-semibold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">Ready</span>
+          </div>
+          <p class="text-xs text-slate-400 mb-4">Upload a technical PDF or research paper to extract and build semantic chunks.</p>
+          
           <div class="flex items-center gap-3">
-            <input type="file" id="pdfFile" accept="application/pdf" class="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"/>
-            <button onclick="uploadPdf()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-md transition">Upload</button>
+            <input type="file" id="pdfFile" accept="application/pdf" class="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer border border-slate-800 rounded-lg bg-slate-950 p-1"/>
+            <button onclick="uploadPdf()" id="uploadBtn" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg shadow-md transition disabled:opacity-50">Upload</button>
           </div>
-          <div id="uploadStatus" class="mt-3 text-xs text-emerald-400 hidden"></div>
-        </div>
+          <div id="uploadStatus" class="mt-3 text-xs text-emerald-400 hidden flex items-center gap-2">
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="uploadStatusText"></span>
+          </div>
+        </section>
 
-        <div class="border-t border-slate-800 pt-6">
-          <h2 class="text-lg font-semibold text-slate-200 mb-2">2. Deep Salience Summary</h2>
-          <button onclick="getSummary()" class="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-indigo-300 font-medium text-xs rounded-md border border-slate-700 transition">Compute Bahdanau Salience & Summarize</button>
-          <div id="summaryBox" class="mt-4 p-4 bg-slate-950 rounded border border-slate-800 text-xs text-slate-300 hidden">
-            <p class="font-semibold text-indigo-400 mb-1">Generated Summary:</p>
-            <p id="summaryText" class="leading-relaxed"></p>
-            <div id="attnWeightInfo" class="mt-3 text-[11px] text-slate-500"></div>
+        <!-- Salience & Summary Box -->
+        <section class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur">
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-base font-bold text-slate-200">2. Attention Salience & Summary</h2>
+            <span id="summaryTimer" class="text-[11px] font-mono text-slate-500"></span>
           </div>
-        </div>
-      </section>
+          <p class="text-xs text-slate-400 mb-4">Run the Bahdanau layer over chunk states and summarize the top salient chunk via DistilBART.</p>
+          
+          <button onclick="getSummary()" id="summaryBtn" class="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 active:scale-[0.99] text-indigo-300 font-semibold text-xs rounded-lg border border-slate-700 transition flex items-center justify-center gap-2 shadow-sm">
+            <span>Compute Salience &amp; Summarize</span>
+          </button>
+
+          <!-- Attention Bar Chart Container -->
+          <div id="chartContainer" class="mt-5 p-4 bg-slate-950 rounded-xl border border-slate-800/80 hidden">
+            <div class="flex justify-between items-center mb-2">
+              <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Bahdanau Attention Distribution (α)</span>
+              <span id="topSalientLabel" class="text-[11px] font-mono text-emerald-400"></span>
+            </div>
+            <div class="h-44 w-full">
+              <canvas id="attentionChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Summary Output -->
+          <div id="summaryBox" class="mt-4 p-4 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 hidden">
+            <div class="flex items-center justify-between mb-2">
+              <p class="font-bold text-indigo-400 uppercase tracking-wider text-[11px]">DistilBART Summary</p>
+              <span class="text-[10px] text-slate-500 font-mono">seq2seq abstractive</span>
+            </div>
+            <p id="summaryText" class="leading-relaxed text-slate-200"></p>
+          </div>
+        </section>
+      </div>
 
       <!-- Right Column: Extractive Question Answering -->
-      <section class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg flex flex-col justify-between">
+      <section class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur flex flex-col justify-between">
         <div>
-          <h2 class="text-lg font-semibold text-slate-200 mb-2">3. Transformer Q&A</h2>
-          <p class="text-xs text-slate-400 mb-4">Query the ingested document using dense embeddings and RoBERTa QA.</p>
+          <div class="flex items-center justify-between mb-2">
+            <h2 class="text-base font-bold text-slate-200">3. Transformer Contextual Q&amp;A</h2>
+            <span id="qaTimer" class="text-[11px] font-mono text-slate-500"></span>
+          </div>
+          <p class="text-xs text-slate-400 mb-4">Query the document. Embeddings isolate semantic context, while RoBERTa pinpoints exact answer spans.</p>
+          
           <div class="flex flex-col gap-3">
-            <input type="text" id="questionInput" placeholder="e.g., What are the main findings?" class="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
-            <button onclick="askQuestion()" class="py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-md transition">Extract Answer</button>
+            <div class="relative">
+              <input type="text" id="questionInput" onkeydown="if(event.key === 'Enter') askQuestion()" placeholder="e.g., What eliminates recurrence entirely?" class="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"/>
+            </div>
+            <button onclick="askQuestion()" id="qaBtn" class="py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white font-semibold text-xs rounded-lg shadow-md transition active:scale-[0.99] flex items-center justify-center gap-2">
+              <span>Extract Answer</span>
+            </button>
           </div>
-          <div id="answerBox" class="mt-5 p-4 bg-slate-950 rounded border border-slate-800 text-xs text-slate-300 hidden">
-            <p class="font-semibold text-emerald-400 mb-1">Answer:</p>
-            <p id="answerText" class="text-sm font-medium text-slate-100 mb-2"></p>
-            <p class="text-[11px] text-slate-400">Confidence: <span id="answerConfidence" class="text-emerald-400"></span></p>
-            <p class="text-[11px] text-slate-500 mt-2">Context: <span id="answerContext" class="italic"></span></p>
+
+          <!-- Answer Box -->
+          <div id="answerBox" class="mt-6 p-5 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 hidden">
+            <div class="flex items-center justify-between mb-3 border-b border-slate-800/80 pb-2">
+              <span class="font-bold text-emerald-400 uppercase tracking-wider text-[11px]">Predicted Answer Span</span>
+              <div class="flex items-center gap-1.5">
+                <span class="text-[11px] text-slate-400">Confidence:</span>
+                <span id="answerConfidence" class="text-[11px] font-bold font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800"></span>
+              </div>
+            </div>
+            
+            <p id="answerText" class="text-base font-bold text-white mb-4 bg-slate-900/60 p-3 rounded border border-slate-800/60"></p>
+            
+            <div>
+              <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Grounded Context</p>
+              <p id="answerContext" class="text-xs text-slate-400 italic bg-slate-900/30 p-2.5 rounded border border-slate-900 leading-relaxed"></p>
+            </div>
           </div>
+        </div>
+
+        <div class="mt-8 pt-4 border-t border-slate-800/80 text-[11px] text-slate-500 flex justify-between items-center">
+          <span>Model: RoBERTa-base-SQuAD2 &middot; all-MiniLM-L6-v2</span>
+          <span class="text-emerald-500 font-mono">Live Engine</span>
         </div>
       </section>
     </div>
@@ -58,56 +124,164 @@
 
   <script>
     const API_BASE = "http://localhost:8000";
+    let chartInstance = null;
 
     async function uploadPdf() {
       const fileInput = document.getElementById("pdfFile");
       if (!fileInput.files.length) return alert("Please select a PDF file.");
+      
+      const uploadBtn = document.getElementById("uploadBtn");
+      const status = document.getElementById("uploadStatus");
+      const statusText = document.getElementById("uploadStatusText");
+      const docBadge = document.getElementById("docBadge");
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = "Parsing...";
+
       const formData = new FormData();
       formData.append("file", fileInput.files[0]);
 
-      const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: formData });
-      const data = await res.json();
-      const status = document.getElementById("uploadStatus");
-      if (res.ok) {
-        status.textContent = data.message;
-        status.classList.remove("hidden");
-      } else {
-        alert(data.detail || "Upload error");
+      try {
+        const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: formData });
+        const data = await res.json();
+        if (res.ok) {
+          statusText.textContent = `${data.filename} (${data.word_count} words processed)`;
+          status.classList.remove("hidden");
+          docBadge.textContent = `${data.word_count} words`;
+          docBadge.classList.remove("hidden");
+        } else {
+          alert(data.detail || "Upload error");
+        }
+      } catch (e) {
+        alert("Server unreachable. Ensure FastAPI server is running.");
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = "Upload";
       }
     }
 
     async function getSummary() {
       const summaryBox = document.getElementById("summaryBox");
       const summaryText = document.getElementById("summaryText");
-      const attnWeightInfo = document.getElementById("attnWeightInfo");
-      summaryText.textContent = "Processing attention weights and generating summary...";
-      summaryBox.classList.remove("hidden");
+      const summaryBtn = document.getElementById("summaryBtn");
+      const summaryTimer = document.getElementById("summaryTimer");
+      const chartContainer = document.getElementById("chartContainer");
+      const topSalientLabel = document.getElementById("topSalientLabel");
 
-      const res = await fetch(`${API_BASE}/summarize`, { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        summaryText.textContent = data.summary;
-        attnWeightInfo.textContent = `Salient Chunk Selected: #${data.salient_chunk_index} | Attention Vector: [${data.attention_distribution.join(", ")}]`;
-      } else {
-        summaryText.textContent = data.detail || "Error generating summary.";
+      summaryBtn.disabled = true;
+      summaryBtn.textContent = "Computing Salience & Attention...";
+      summaryBox.classList.remove("hidden");
+      summaryText.textContent = "Processing Bi-GRU forward/backward pass and generating summary...";
+
+      const startTime = performance.now();
+
+      try {
+        const res = await fetch(`${API_BASE}/summarize`, { method: "POST" });
+        const data = await res.json();
+        const duration = (performance.now() - startTime).toFixed(0);
+        summaryTimer.textContent = `${duration} ms`;
+
+        if (res.ok) {
+          summaryText.textContent = data.summary;
+          topSalientLabel.textContent = `Top Chunk: #${data.salient_chunk_index}`;
+
+          // Render Attention Bar Chart
+          renderAttentionChart(data.attention_distribution, data.salient_chunk_index);
+          chartContainer.classList.remove("hidden");
+        } else {
+          summaryText.textContent = data.detail || "Error generating summary.";
+        }
+      } catch (e) {
+        summaryText.textContent = "Failed to communicate with backend.";
+      } finally {
+        summaryBtn.disabled = false;
+        summaryBtn.textContent = "Compute Salience & Summarize";
       }
     }
 
+    function renderAttentionChart(weights, topIdx) {
+      const ctx = document.getElementById("attentionChart").getContext("2d");
+      const labels = weights.map((_, i) => `Chunk ${i}`);
+      const backgroundColors = weights.map((_, i) => i === topIdx ? "rgba(52, 211, 153, 0.85)" : "rgba(99, 102, 241, 0.5)");
+      const borderColors = weights.map((_, i) => i === topIdx ? "rgb(52, 211, 153)" : "rgb(99, 102, 241)");
+
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      chartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "Bahdanau Weight (α)",
+            data: weights,
+            backgroundColor: backgroundColors,
+            borderColor: borderColors,
+            borderWidth: 1.5,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => ` Attention Weight: ${Number(ctx.raw).toFixed(4)}`
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: "rgba(51, 65, 85, 0.3)" },
+              ticks: { color: "#94a3b8", font: { size: 10 } }
+            },
+            y: {
+              beginAtZero: true,
+              grid: { color: "rgba(51, 65, 85, 0.3)" },
+              ticks: { color: "#94a3b8", font: { size: 10 } }
+            }
+          }
+        }
+      });
+    }
+
     async function askQuestion() {
-      const question = document.getElementById("questionInput").value;
+      const question = document.getElementById("questionInput").value.trim();
       if (!question) return alert("Enter a question first.");
+
+      const qaBtn = document.getElementById("qaBtn");
+      const qaTimer = document.getElementById("qaTimer");
+      const answerBox = document.getElementById("answerBox");
+
+      qaBtn.disabled = true;
+      qaBtn.textContent = "Searching & Predicting...";
+
+      const startTime = performance.now();
       const formData = new FormData();
       formData.append("question", question);
 
-      const res = await fetch(`${API_BASE}/ask`, { method: "POST", body: formData });
-      const data = await res.json();
-      if (res.ok) {
-        document.getElementById("answerBox").classList.remove("hidden");
-        document.getElementById("answerText").textContent = data.answer;
-        document.getElementById("answerConfidence").textContent = `${(data.confidence * 100).toFixed(1)}%`;
-        document.getElementById("answerContext").textContent = data.context;
-      } else {
-        alert(data.detail || "Error fetching answer.");
+      try {
+        const res = await fetch(`${API_BASE}/ask`, { method: "POST", body: formData });
+        const data = await res.json();
+        const duration = (performance.now() - startTime).toFixed(0);
+        qaTimer.textContent = `${duration} ms`;
+
+        if (res.ok) {
+          answerBox.classList.remove("hidden");
+          document.getElementById("answerText").textContent = data.answer;
+          document.getElementById("answerConfidence").textContent = `${(data.confidence * 100).toFixed(1)}%`;
+          document.getElementById("answerContext").textContent = data.context;
+        } else {
+          alert(data.detail || "Error fetching answer.");
+        }
+      } catch (e) {
+        alert("Server communication error.");
+      } finally {
+        qaBtn.disabled = false;
+        qaBtn.textContent = "Extract Answer";
       }
     }
   </script>
