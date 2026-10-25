@@ -1,0 +1,14 @@
+services:
+  deepdigest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: deepdigest-engine
+    ports:
+      - "8080:8000"
+    environment:
+      - TF_ENABLE_ONEDNN_OPTS=0
+      - PYTHONUNBUFFERED=1
+      - TRANSFORMERS_OFFLINE=1
+      - HF_HUB_OFFLINE=1
+    restart: unless-stopped

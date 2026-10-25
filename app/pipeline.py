@@ -1,91 +1,125 @@
-import re
 import numpy as np
 import tensorflow as tf
-from pypdf import PdfReader
-from transformers import pipeline
 from sentence_transformers import SentenceTransformer
+from transformers import pipeline
 from app.dl_models import AttentionSalienceScorerTF
+import pypdf
+import io
+import re
 
 class TFDeepLearningDocPipeline:
     def __init__(self):
-        # 1. Semantic Embedder (Dense representation)
-        self.embedder = SentenceTransformer('all-MiniLM-L6-v2')
 
-        # 2. Initialize Custom TensorFlow Attention Salience Model
-        self.salience_model = AttentionSalienceScorerTF(embed_dim=384, hidden_dim=128)
-        dummy = tf.zeros((1, 5, 384), dtype=tf.float32)
-        self.salience_model(dummy)
+# 1. Custom TensorFlow Bi-GRU + Bahdanau Attention model
+        self.salience_model = AttentionSalienceScorerTF(vocab_size=5000, embed_dim=64, gru_units=64)
+        dummy = tf.zeros((1, 20), dtype=tf.int32)
+        self.salience_model(dummy)  # Build weights
+        
+        # 2. Dense semantic embeddings
+        self.embedder = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
-        # 3. Transformer Abstractive Summarizer
-        self.summarizer = pipeline('summarization', model='sshleifer/distilbart-cnn-12-6')
-
-        # 4. Transformer Extractive QA Head
-        self.qa_head = pipeline('question-answering', model='deepset/roberta-base-squad2')
-
-    @staticmethod
-    def extract_and_clean_pdf(file_bytes) -> str:
-        reader = PdfReader(file_bytes)
-        text = ' '.join([page.extract_text() or '' for page in reader.pages])
-        text = re.sub(r'(\w+)-\n(\w+)', r'\1\2', text)
-        text = re.sub(r'[\r\n\t]+', ' ', text)
-        return re.sub(r' +', ' ', text).strip()
-
-    @staticmethod
-    def chunk_text(text: str, chunk_size: int = 150, overlap: int = 30):
-        words = text.split()
-        if not words:
-            return []
-        chunks = []
-        step = chunk_size - overlap
-        for i in range(0, len(words), step):
-            sub = words[i:i + chunk_size]
-            chunks.append({'chunk_id': len(chunks), 'text': ' '.join(sub)})
-            if i + chunk_size >= len(words):
-                break
-        return chunks
-
-    def process_and_summarize(self, text: str) -> dict:
-        chunks = self.chunk_text(text, chunk_size=150, overlap=30)
-        if not chunks:
-            return {"summary": "Empty document.", "attention_weights": [], "top_chunk_idx": 0}
-
-        chunk_texts = [c['text'] for c in chunks]
-        raw_embs = self.embedder.encode(chunk_texts, convert_to_tensor=False)
-        tf_embs = tf.expand_dims(tf.convert_to_tensor(raw_embs, dtype=tf.float32), axis=0)
-
-        _, attn_weights = self.salience_model(tf_embs, training=False)
-        attn_dist = attn_weights.numpy()[0].tolist()
-        top_idx = int(np.argmax(attn_dist))
-
-        summary_res = self.summarizer(
-            chunk_texts[top_idx],
-            max_length=120,
-            min_length=30,
-            do_sample=False
+        # 3. Abstractive summarization with DistilBART (explicit PyTorch)
+        self.summarizer = pipeline(
+            'summarization',
+            model='sshleifer/distilbart-cnn-12-6',
+            framework='pt'
         )
 
+        # 4. Contextual extractive QA with RoBERTa (explicit PyTorch)
+        self.qa_model = pipeline(
+            'question-answering',
+            model='deepset/roberta-base-squad2',
+            framework='pt'
+        )
+
+        self.current_chunks = []
+        self.chunk_embeddings = None
+
+    def ingest_pdf(self, file_bytes: bytes) -> dict:
+        pdf_reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+        full_text = ""
+        for page in pdf_reader.pages:
+            t = page.extract_text()
+            if t:
+                full_text += t + " "
+
+        return self.ingest_text(full_text)
+
+    def ingest_text(self, text: str) -> dict:
+        clean = re.sub(r'\s+', ' ', text).strip()
+        words = clean.split(' ')
+        chunk_size = 150
+        overlap = 30
+        step = chunk_size - overlap
+
+        chunks = []
+        for i in range(0, len(words), step):
+            c = " ".join(words[i:i + chunk_size])
+            if c:
+                chunks.append(c)
+
+        if not chunks and clean:
+            chunks = [clean]
+
+        self.current_chunks = chunks
+        if chunks:
+            self.chunk_embeddings = self.embedder.encode(chunks, convert_to_numpy=True)
+        else:
+            self.chunk_embeddings = None
+
+        return {"chunks_count": len(chunks), "total_words": len(words)}
+
+    def compute_salience_and_summarize(self) -> dict:
+        if not self.current_chunks:
+            raise ValueError("No document ingested yet.")
+
+        # Simulate token index representations for each chunk
+        chunk_tokens = []
+        for c in self.current_chunks:
+            words = c.lower().split()[:20]
+            tokens = [hash(w) % 4999 + 1 for w in words]
+            if len(tokens) < 20:
+                tokens = tokens + [0] * (20 - len(tokens))
+            chunk_tokens.append(tokens)
+
+        x = tf.constant(chunk_tokens, dtype=tf.int32)
+        _, weights = self.salience_model(x)
+
+        avg_weights = np.mean(weights.numpy(), axis=1).flatten()
+        if np.sum(avg_weights) > 0:
+            norm_weights = avg_weights / np.sum(avg_weights)
+        else:
+            norm_weights = np.ones(len(self.current_chunks)) / len(self.current_chunks)
+
+        top_chunk_idx = int(np.argmax(norm_weights))
+        top_chunk_text = self.current_chunks[top_chunk_idx]
+
+        summary_res = self.summarizer(top_chunk_text, max_length=130, min_length=30, do_sample=False)
+        summary = summary_res[0]['summary_text']
+
         return {
-            "summary": summary_res[0]["summary_text"],
-            "top_chunk_idx": top_idx,
-            "attention_distribution": [round(float(w), 4) for w in attn_dist]
+            "salient_chunk_index": top_chunk_idx,
+            "attention_distribution": [float(w) for w in norm_weights],
+            "summary": summary
         }
 
-    def answer_query(self, question: str, text: str, top_k: int = 2) -> dict:
-        chunks = self.chunk_text(text, chunk_size=150, overlap=30)
-        if not chunks:
-            return {"answer": "No content to search.", "confidence": 0.0, "retrieved_context": ""}
+    def answer_question(self, question: str) -> dict:
+        if not self.current_chunks or self.chunk_embeddings is None:
+            raise ValueError("No document ingested yet.")
 
-        chunk_texts = [c['text'] for c in chunks]
-        doc_emb = self.embedder.encode(chunk_texts, normalize_embeddings=True)
-        q_emb = self.embedder.encode([question], normalize_embeddings=True)
+        q_emb = self.embedder.encode([question], convert_to_numpy=True)
 
-        sims = np.dot(doc_emb, q_emb.T).flatten()
-        top_indices = np.argsort(sims)[::-1][:top_k]
-        context = ' '.join([chunk_texts[idx] for idx in top_indices])
+        norms = np.linalg.norm(self.chunk_embeddings, axis=1) * np.linalg.norm(q_emb)
+        norms[norms == 0] = 1e-10
+        similarities = np.dot(self.chunk_embeddings, q_emb.T).flatten() / norms
 
-        qa_res = self.qa_head(question=question, context=context)
+        top_idx = int(np.argmax(similarities))
+        context = self.current_chunks[top_idx]
+
+        qa_res = self.qa_model(question=question, context=context)
+
         return {
-            "answer": qa_res["answer"],
-            "confidence": round(float(qa_res["score"]), 4),
-            "retrieved_context": context[:250] + '...'
+            "answer": qa_res['answer'],
+            "confidence": float(qa_res['score']),
+            "context": context
         }

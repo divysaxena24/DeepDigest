@@ -3,9 +3,8 @@ numpy==1.26.4
 protobuf==4.25.3
 ml-dtypes==0.3.2
 h5py==3.14.0
-tensorflow==2.16.1
 tensorflow-cpu==2.16.1
-tensorflow-intel==2.16.1
+tensorflow-intel==2.16.1; sys_platform == 'win32'
 tf-keras==2.16.0
 
 # PyTorch & Hugging Face Transformers
