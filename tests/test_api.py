@@ -46,3 +46,4 @@ def test_summarize_flow():
     assert "salient_chunk_index" in data
     assert "attention_distribution" in data
     assert len(data["attention_distribution"]) > 0
+
